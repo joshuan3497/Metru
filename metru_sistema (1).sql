@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Servidor: 127.0.0.1
--- Tiempo de generación: 08-07-2025 a las 22:46:47
+-- Tiempo de generación: 16-07-2025 a las 20:12:34
 -- Versión del servidor: 10.4.25-MariaDB
 -- Versión de PHP: 8.1.10
 
@@ -25,53 +25,68 @@ DELIMITER $$
 --
 -- Procedimientos
 --
-CREATE DEFINER=`root`@`localhost` PROCEDURE `cerrar_ruta` (IN `p_salida_id` INT)   BEGIN
-    DECLARE done INT DEFAULT FALSE;
-    DECLARE v_producto_id INT;
-    DECLARE v_cantidad_salida INT;
-    DECLARE v_cantidad_vendida INT;
-    DECLARE v_cantidad_devuelta INT;
-    
-    DECLARE cursor_productos CURSOR FOR
-        SELECT ds.producto_id, ds.cantidad
-        FROM detalle_salidas ds
-        WHERE ds.salida_id = p_salida_id;
-    
-    DECLARE CONTINUE HANDLER FOR NOT FOUND SET done = TRUE;
-    
-    -- Limpiar devoluciones existentes
-    DELETE FROM devoluciones WHERE salida_id = p_salida_id;
-    
-    OPEN cursor_productos;
-    
-    productos_loop: LOOP
-        FETCH cursor_productos INTO v_producto_id, v_cantidad_salida;
-        IF done THEN
-            LEAVE productos_loop;
-        END IF;
-        
-        -- Calcular cantidad vendida
-        SELECT COALESCE(SUM(df.cantidad), 0) INTO v_cantidad_vendida
-        FROM detalle_facturas df
-        JOIN facturas f ON df.factura_id = f.id
-        WHERE f.salida_id = p_salida_id AND df.producto_id = v_producto_id;
-        
-        -- Calcular cantidad que debe regresar
-        SET v_cantidad_devuelta = v_cantidad_salida - v_cantidad_vendida;
-        
-        -- Insertar devolución si hay productos que deben regresar
-        IF v_cantidad_devuelta > 0 THEN
-            INSERT INTO devoluciones (salida_id, producto_id, cantidad_devuelta)
-            VALUES (p_salida_id, v_producto_id, v_cantidad_devuelta);
-        END IF;
-        
-    END LOOP;
-    
-    CLOSE cursor_productos;
-    
+CREATE DEFINER=`root`@`localhost` PROCEDURE `cerrar_ruta` (IN `salida_id_param` INT)   BEGIN
     -- Actualizar estado de la salida
-    UPDATE salidas_mercancia SET estado = 'finalizada' WHERE id = p_salida_id;
+    UPDATE salidas_mercancia 
+    SET estado = 'finalizada' 
+    WHERE id = salida_id_param;
     
+    -- Registrar devoluciones automáticas
+    INSERT INTO devoluciones (salida_id, producto_id, cantidad_devuelta)
+    SELECT 
+        salida_id_param,
+        ds.producto_id,
+        ds.cantidad - COALESCE(SUM(df.cantidad), 0) as cantidad_devuelta
+    FROM detalle_salidas ds
+    LEFT JOIN detalle_facturas df ON df.producto_id = ds.producto_id 
+        AND df.factura_id IN (SELECT id FROM facturas WHERE salida_id = salida_id_param)
+    WHERE ds.salida_id = salida_id_param
+    GROUP BY ds.producto_id, ds.cantidad
+    HAVING cantidad_devuelta > 0
+    ON DUPLICATE KEY UPDATE 
+        cantidad_devuelta = VALUES(cantidad_devuelta);
+END$$
+
+CREATE DEFINER=`root`@`localhost` PROCEDURE `limpiar_datos_antiguos` (IN `dias_mantener` INT)   BEGIN
+    DECLARE fecha_limite DATE;
+    SET fecha_limite = DATE_SUB(CURDATE(), INTERVAL dias_mantener DAY);
+    
+    -- Archivar facturas antiguas (no eliminar, solo marcar)
+    -- Aquí podrías mover a tablas de archivo si lo necesitas
+    
+    -- Limpiar logs o datos temporales si los hay
+    
+    SELECT CONCAT('Proceso completado. Datos mantenidos desde: ', fecha_limite) as mensaje;
+END$$
+
+CREATE DEFINER=`root`@`localhost` PROCEDURE `obtener_resumen_salida` (IN `salida_id` INT)   BEGIN
+    -- Resumen general
+    SELECT 
+        s.*,
+        r.nombre as ruta_nombre,
+        COUNT(DISTINCT ds.producto_id) as total_productos,
+        SUM(ds.cantidad) as total_unidades,
+        COUNT(DISTINCT f.id) as total_facturas,
+        COALESCE(SUM(f.total), 0) as total_vendido
+    FROM salidas_mercancia s
+    JOIN rutas r ON s.ruta_id = r.id
+    LEFT JOIN detalle_salidas ds ON s.id = ds.salida_id
+    LEFT JOIN facturas f ON s.id = f.salida_id
+    WHERE s.id = salida_id
+    GROUP BY s.id;
+    
+    -- Detalle de productos
+    SELECT 
+        p.descripcion,
+        ds.cantidad as cantidad_salida,
+        COALESCE(SUM(df.cantidad), 0) as cantidad_vendida,
+        ds.cantidad - COALESCE(SUM(df.cantidad), 0) as cantidad_pendiente
+    FROM detalle_salidas ds
+    JOIN productos p ON ds.producto_id = p.id
+    LEFT JOIN detalle_facturas df ON p.id = df.producto_id 
+        AND df.factura_id IN (SELECT id FROM facturas WHERE salida_id = salida_id)
+    WHERE ds.salida_id = salida_id
+    GROUP BY ds.id, p.id;
 END$$
 
 --
@@ -312,7 +327,9 @@ CREATE TABLE `devoluciones` (
 
 INSERT INTO `devoluciones` (`id`, `salida_id`, `producto_id`, `cantidad_devuelta`, `fecha_devolucion`) VALUES
 (1, 1, 1, 9, '2025-06-20 20:31:22'),
-(2, 5, 53, 2, '2025-06-26 19:30:01');
+(2, 5, 53, 2, '2025-06-26 19:30:01'),
+(5, 10, 46, 30, '2025-07-16 17:43:23'),
+(6, 10, 108, 30, '2025-07-16 17:43:23');
 
 -- --------------------------------------------------------
 
@@ -591,7 +608,9 @@ INSERT INTO `salidas_mercancia` (`id`, `ruta_id`, `usuario_id`, `fecha_salida`, 
 (8, 1, 2, '2025-06-28', '', 'en_ruta', '2025-06-28 16:44:57'),
 (9, 1, 2, '2025-07-05', '', 'finalizada', '2025-07-05 22:02:03'),
 (10, 2, 2, '2025-07-05', '', 'finalizada', '2025-07-05 22:15:35'),
-(11, 1, 2, '2025-07-08', '', 'en_ruta', '2025-07-08 20:01:18');
+(11, 1, 2, '2025-07-08', '', 'finalizada', '2025-07-08 20:01:18'),
+(12, 1, 2, '2025-07-16', 'sale el martes', 'finalizada', '2025-07-16 17:38:07'),
+(13, 1, 2, '2025-07-16', '', 'en_ruta', '2025-07-16 17:41:12');
 
 -- --------------------------------------------------------
 
@@ -614,7 +633,12 @@ CREATE TABLE `salida_trabajadores` (
 INSERT INTO `salida_trabajadores` (`id`, `salida_id`, `trabajador_id`, `es_principal`, `fecha_asignacion`) VALUES
 (7, 9, 2, 1, '2025-07-05 22:07:56'),
 (8, 9, 3, 0, '2025-07-05 22:07:56'),
-(9, 9, 4, 0, '2025-07-05 22:07:56');
+(9, 9, 4, 0, '2025-07-05 22:07:56'),
+(10, 12, 2, 1, '2025-07-16 17:38:07'),
+(11, 12, 3, 0, '2025-07-16 17:38:07'),
+(12, 12, 4, 0, '2025-07-16 17:38:07'),
+(13, 13, 2, 1, '2025-07-16 17:41:12'),
+(14, 13, 3, 0, '2025-07-16 17:41:12');
 
 -- --------------------------------------------------------
 
@@ -645,6 +669,55 @@ INSERT INTO `usuarios` (`id`, `codigo_usuario`, `nombre`, `tipo`, `password`, `a
 -- --------------------------------------------------------
 
 --
+-- Estructura Stand-in para la vista `vista_productos_mas_vendidos`
+-- (Véase abajo para la vista actual)
+--
+CREATE TABLE `vista_productos_mas_vendidos` (
+`id` int(11)
+,`codigo` varchar(10)
+,`descripcion` varchar(150)
+,`unidad_medida` enum('CAJA','SIX PAK','UNIDAD','PAQ')
+,`total_vendido` decimal(32,0)
+,`veces_vendido` bigint(21)
+,`ingresos_totales` decimal(32,2)
+);
+
+-- --------------------------------------------------------
+
+--
+-- Estructura Stand-in para la vista `vista_rendimiento_trabajadores`
+-- (Véase abajo para la vista actual)
+--
+CREATE TABLE `vista_rendimiento_trabajadores` (
+`trabajador_id` int(11)
+,`trabajador_nombre` varchar(100)
+,`codigo_usuario` varchar(10)
+,`fecha` date
+,`facturas_creadas` bigint(21)
+,`total_vendido` decimal(32,2)
+,`promedio_venta` decimal(14,6)
+);
+
+-- --------------------------------------------------------
+
+--
+-- Estructura Stand-in para la vista `vista_resumen_ventas_diario`
+-- (Véase abajo para la vista actual)
+--
+CREATE TABLE `vista_resumen_ventas_diario` (
+`fecha` date
+,`ruta_id` int(11)
+,`ruta_nombre` varchar(50)
+,`total_facturas` bigint(21)
+,`total_vendido` decimal(32,2)
+,`total_efectivo` decimal(32,2)
+,`total_transferencia` decimal(32,2)
+,`total_pendiente` decimal(32,2)
+);
+
+-- --------------------------------------------------------
+
+--
 -- Estructura Stand-in para la vista `vista_ventas_detalle`
 -- (Véase abajo para la vista actual)
 --
@@ -662,6 +735,33 @@ CREATE TABLE `vista_ventas_detalle` (
 ,`forma_pago` enum('efectivo','transferencia','pendiente')
 ,`total_factura` decimal(10,2)
 );
+
+-- --------------------------------------------------------
+
+--
+-- Estructura para la vista `vista_productos_mas_vendidos`
+--
+DROP TABLE IF EXISTS `vista_productos_mas_vendidos`;
+
+CREATE ALGORITHM=UNDEFINED DEFINER=`root`@`localhost` SQL SECURITY DEFINER VIEW `vista_productos_mas_vendidos`  AS SELECT `p`.`id` AS `id`, `p`.`codigo` AS `codigo`, `p`.`descripcion` AS `descripcion`, `p`.`unidad_medida` AS `unidad_medida`, sum(`df`.`cantidad`) AS `total_vendido`, count(distinct `f`.`id`) AS `veces_vendido`, sum(`df`.`subtotal`) AS `ingresos_totales` FROM ((`productos` `p` join `detalle_facturas` `df` on(`p`.`id` = `df`.`producto_id`)) join `facturas` `f` on(`df`.`factura_id` = `f`.`id`)) WHERE `f`.`fecha_venta` >= curdate() - interval 30 day GROUP BY `p`.`id` ORDER BY sum(`df`.`cantidad`) AS `DESCdesc` ASC  ;
+
+-- --------------------------------------------------------
+
+--
+-- Estructura para la vista `vista_rendimiento_trabajadores`
+--
+DROP TABLE IF EXISTS `vista_rendimiento_trabajadores`;
+
+CREATE ALGORITHM=UNDEFINED DEFINER=`root`@`localhost` SQL SECURITY DEFINER VIEW `vista_rendimiento_trabajadores`  AS SELECT `u`.`id` AS `trabajador_id`, `u`.`nombre` AS `trabajador_nombre`, `u`.`codigo_usuario` AS `codigo_usuario`, cast(`f`.`fecha_venta` as date) AS `fecha`, count(`f`.`id`) AS `facturas_creadas`, sum(`f`.`total`) AS `total_vendido`, avg(`f`.`total`) AS `promedio_venta` FROM (`usuarios` `u` join `facturas` `f` on(`u`.`id` = `f`.`vendedor_id`)) WHERE `u`.`tipo` = 'trabajador' AND `f`.`fecha_venta` >= curdate() - interval 30 day GROUP BY `u`.`id`, cast(`f`.`fecha_venta` as date)  ;
+
+-- --------------------------------------------------------
+
+--
+-- Estructura para la vista `vista_resumen_ventas_diario`
+--
+DROP TABLE IF EXISTS `vista_resumen_ventas_diario`;
+
+CREATE ALGORITHM=UNDEFINED DEFINER=`root`@`localhost` SQL SECURITY DEFINER VIEW `vista_resumen_ventas_diario`  AS SELECT cast(`f`.`fecha_venta` as date) AS `fecha`, `s`.`ruta_id` AS `ruta_id`, `r`.`nombre` AS `ruta_nombre`, count(distinct `f`.`id`) AS `total_facturas`, sum(`f`.`total`) AS `total_vendido`, sum(case when `f`.`forma_pago` = 'efectivo' then `f`.`total` else 0 end) AS `total_efectivo`, sum(case when `f`.`forma_pago` = 'transferencia' then `f`.`total` else 0 end) AS `total_transferencia`, sum(case when `f`.`forma_pago` = 'pendiente' then `f`.`total` else 0 end) AS `total_pendiente` FROM ((`facturas` `f` join `salidas_mercancia` `s` on(`f`.`salida_id` = `s`.`id`)) join `rutas` `r` on(`s`.`ruta_id` = `r`.`id`)) GROUP BY cast(`f`.`fecha_venta` as date), `s`.`ruta_id`, `r`.`nombre``nombre`  ;
 
 -- --------------------------------------------------------
 
@@ -695,16 +795,17 @@ ALTER TABLE `clientes`
 --
 ALTER TABLE `detalle_facturas`
   ADD PRIMARY KEY (`id`),
-  ADD KEY `producto_id` (`producto_id`),
-  ADD KEY `idx_detalle_factura` (`factura_id`);
+  ADD KEY `idx_detalle_factura` (`factura_id`),
+  ADD KEY `idx_detalle_facturas_producto` (`producto_id`);
 
 --
 -- Indices de la tabla `detalle_salidas`
 --
 ALTER TABLE `detalle_salidas`
   ADD PRIMARY KEY (`id`),
-  ADD KEY `producto_id` (`producto_id`),
-  ADD KEY `idx_cargado` (`salida_id`,`cargado`);
+  ADD KEY `idx_cargado` (`salida_id`,`cargado`),
+  ADD KEY `idx_detalle_salidas_producto` (`producto_id`),
+  ADD KEY `idx_detalle_salidas_cargado` (`cargado`);
 
 --
 -- Indices de la tabla `devoluciones`
@@ -720,10 +821,12 @@ ALTER TABLE `devoluciones`
 ALTER TABLE `facturas`
   ADD PRIMARY KEY (`id`),
   ADD UNIQUE KEY `numero_factura` (`numero_factura`),
-  ADD KEY `vendedor_id` (`vendedor_id`),
   ADD KEY `idx_facturas_fecha` (`fecha_venta`),
   ADD KEY `idx_factura_salida` (`salida_id`),
-  ADD KEY `fk_facturas_cliente` (`cliente_id`);
+  ADD KEY `idx_facturas_salida_fecha` (`salida_id`,`fecha_venta`),
+  ADD KEY `idx_facturas_vendedor_fecha` (`vendedor_id`,`fecha_venta`),
+  ADD KEY `idx_facturas_cliente` (`cliente_id`),
+  ADD KEY `idx_facturas_forma_pago` (`forma_pago`);
 
 --
 -- Indices de la tabla `gastos_ruta`
@@ -740,6 +843,7 @@ ALTER TABLE `productos`
   ADD UNIQUE KEY `codigo` (`codigo`),
   ADD KEY `idx_productos_grupo` (`grupo_id`),
   ADD KEY `idx_productos_costo` (`costo`);
+ALTER TABLE `productos` ADD FULLTEXT KEY `idx_productos_descripcion` (`descripcion`);
 
 --
 -- Indices de la tabla `rutas`
@@ -752,9 +856,10 @@ ALTER TABLE `rutas`
 --
 ALTER TABLE `salidas_mercancia`
   ADD PRIMARY KEY (`id`),
-  ADD KEY `ruta_id` (`ruta_id`),
   ADD KEY `usuario_id` (`usuario_id`),
-  ADD KEY `idx_salidas_fecha` (`fecha_salida`);
+  ADD KEY `idx_salidas_fecha` (`fecha_salida`),
+  ADD KEY `idx_salidas_estado_fecha` (`estado`,`fecha_salida`),
+  ADD KEY `idx_salidas_ruta_estado` (`ruta_id`,`estado`);
 
 --
 -- Indices de la tabla `salida_trabajadores`
@@ -762,7 +867,7 @@ ALTER TABLE `salidas_mercancia`
 ALTER TABLE `salida_trabajadores`
   ADD PRIMARY KEY (`id`),
   ADD UNIQUE KEY `unique_salida_trabajador` (`salida_id`,`trabajador_id`),
-  ADD KEY `trabajador_id` (`trabajador_id`);
+  ADD KEY `idx_salida_trabajadores_trabajador` (`trabajador_id`);
 
 --
 -- Indices de la tabla `usuarios`
@@ -803,7 +908,7 @@ ALTER TABLE `detalle_salidas`
 -- AUTO_INCREMENT de la tabla `devoluciones`
 --
 ALTER TABLE `devoluciones`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=3;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=7;
 
 --
 -- AUTO_INCREMENT de la tabla `facturas`
@@ -833,19 +938,19 @@ ALTER TABLE `rutas`
 -- AUTO_INCREMENT de la tabla `salidas_mercancia`
 --
 ALTER TABLE `salidas_mercancia`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=12;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=14;
 
 --
 -- AUTO_INCREMENT de la tabla `salida_trabajadores`
 --
 ALTER TABLE `salida_trabajadores`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=10;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=15;
 
 --
 -- AUTO_INCREMENT de la tabla `usuarios`
 --
 ALTER TABLE `usuarios`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=5;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=10;
 
 --
 -- Restricciones para tablas volcadas
