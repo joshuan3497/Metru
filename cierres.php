@@ -484,7 +484,7 @@ include '../includes/header.php';
                                 htmlspecialchars($factura['cliente_libre']);
                             ?>
                         </td>
-                        <td><?php echo htmlspecialchars($factura['ciudad']); ?></td>
+                        <td><?php echo htmlspecialchars($factura['cliente_ciudad'] ?? 'Sin especificar'); ?></td>
                         <td><?php echo obtenerUsuarioPorId($factura['vendedor_id'])['nombre']; ?></td>
                         <td><?php echo formatearPrecio($factura['total']); ?></td>
                         <td>
@@ -510,10 +510,10 @@ include '../includes/header.php';
 </div>
 
 <!-- Incluir modal de detalle -->
-<?php include 'includes/modal_detalle_factura.php'; ?>
+<?php include '../includes/modal_detalle_factura.php'; ?>
 
 <!-- Incluir sección de gastos -->
-<?php include 'includes/seccion_gastos_ruta.php'; ?>
+<?php include '../includes/seccion_gastos_ruta.php'; ?>
 
 <script>
 function guardarDevoluciones() {

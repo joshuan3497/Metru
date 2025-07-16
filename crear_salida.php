@@ -30,9 +30,6 @@ if ($_POST && isset($_POST['accion']) && $_POST['accion'] == 'crear_salida') {
         $errores[] = "Debe seleccionar una ruta";
     }
     
-    if (!$responsable_id) {
-        $errores[] = "Debe seleccionar un responsable";
-    }
     
     if (empty($trabajadores_asignados)) {
     $errores[] = "Debe asignar al menos un trabajador a la ruta";
@@ -78,7 +75,7 @@ foreach ($trabajadores_asignados as $trabajador_id) {
             $pdo->beginTransaction();
             
             // Crear la salida
-            $salida_id = crearSalidaMercancia($ruta_id, $responsable_id, $fecha_salida, $observaciones);
+            $salida_id = crearSalidaMercancia($ruta_id, $trabajador_principal, $fecha_salida, $observaciones);
             
             // Agregar productos
             foreach ($trabajadores_asignados as $trabajador_id) {

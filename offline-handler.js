@@ -1,6 +1,7 @@
 // Manejo de modo offline para Sistema Metru
 
 // Registrar Service Worker
+/*
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('/Metru/sw.js')
@@ -12,6 +13,7 @@ if ('serviceWorker' in navigator) {
       });
   });
 }
+  */
 
 // Estado de conexión
 let isOnline = navigator.onLine;

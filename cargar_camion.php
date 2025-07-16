@@ -4,7 +4,7 @@
 // =====================================================
 
 include_once '../includes/functions.php';
-include_once '../config/config.php';  // AÑADIR ESTA LÍNEA
+include_once '../config/config.php'; 
 verificarSesion('admin');
 
 $titulo_pagina = 'Cargar Camión';
