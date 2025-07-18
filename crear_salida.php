@@ -86,6 +86,31 @@ foreach ($trabajadores_asignados as $trabajador_id) {
                 );
             }
             
+                        $productos_agregados = 0;
+            foreach ($_POST as $key => $value) {
+                // Buscar campos de productos (formato: producto_X_id y producto_X_cantidad)
+                if (preg_match('/^producto_(\d+)_id$/', $key, $matches)) {
+                    $index = $matches[1];
+                    $producto_id = $value;
+                    $cantidad_key = "producto_{$index}_cantidad";
+                    $cantidad = $_POST[$cantidad_key] ?? 0;
+                    
+                    if ($producto_id > 0 && $cantidad > 0) {
+                        ejecutarConsulta(
+                            "INSERT INTO detalle_salidas (salida_id, producto_id, cantidad, tipo_carga) 
+                            VALUES (?, ?, ?, 'normal')",
+                            [$salida_id, $producto_id, $cantidad]
+                        );
+                        $productos_agregados++;
+                    }
+                }
+            }
+
+            // Verificar que se agregaron productos
+            if ($productos_agregados == 0) {
+                throw new Exception("No se agregaron productos a la salida");
+            }
+
             $pdo->commit();
             
             $_SESSION['mensaje'] = 'Salida creada exitosamente';
@@ -350,6 +375,185 @@ include '../includes/header.php';
         border-color: #007bff !important;
     }
     </style>
+
+    <script>
+    // Variables globales
+    window.productosAgregados = {};
+    window.contadorProductos = 0;
+
+    // Función para agregar producto a la salida
+    function agregarProductoASalida(producto) {
+        // Verificar si ya está agregado
+        if (productosAgregados[producto.id]) {
+            alert('Este producto ya está agregado');
+            return;
+        }
+        
+        // Agregar a la lista
+        productosAgregados[producto.id] = true;
+        contadorProductos++;
+        
+        const html = `
+            <div class="producto-item card mb-2" id="producto_item_${producto.id}">
+                <div class="card-body p-2">
+                    <input type="hidden" name="producto_${contadorProductos}_id" value="${producto.id}">
+                    <div class="row align-items-center">
+                        <div class="col-md-6">
+                            <strong>${producto.descripcion}</strong><br>
+                            <small class="text-muted">
+                                ${producto.codigo} • ${producto.unidad_medida}
+                            </small>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="input-group input-group-sm">
+                                <span class="input-group-text">Cantidad</span>
+                                <input type="number" 
+                                    name="producto_${contadorProductos}_cantidad" 
+                                    class="form-control" 
+                                    value="1" 
+                                    min="1" 
+                                    required>
+                            </div>
+                        </div>
+                        <div class="col-md-2 text-end">
+                            <span class="text-success">
+                                $${Number(producto.precio_publico).toLocaleString('es-CO')}
+                            </span>
+                        </div>
+                        <div class="col-md-1 text-end">
+                            <button type="button" 
+                                    class="btn btn-danger btn-sm" 
+                                    onclick="quitarProducto(${producto.id})">
+                                <i class="fas fa-times"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        // Si es el primer producto, quitar el mensaje
+        if (contadorProductos === 1) {
+            $('#productos-seleccionados').empty();
+        }
+        
+        $('#productos-seleccionados').append(html);
+        actualizarContador();
+        
+        // Limpiar búsqueda
+        $('#buscar-producto').val('').focus();
+        $('#resultados-busqueda').empty();
+    }
+
+    // Función para quitar producto
+    function quitarProducto(productoId) {
+        $(`#producto_item_${productoId}`).remove();
+        delete productosAgregados[productoId];
+        contadorProductos--;
+        actualizarContador();
+        
+        if (contadorProductos === 0) {
+            $('#productos-seleccionados').html(`
+                <div class="alert alert-info text-center">
+                    <i class="fas fa-box-open fa-2x mb-2"></i>
+                    <p class="mb-0">No hay productos agregados.</p>
+                </div>
+            `);
+        }
+    }
+
+    // Actualizar contador visual
+    function actualizarContador() {
+        $('#contador-productos').text(contadorProductos);
+        
+        // Habilitar/deshabilitar botón de crear
+        if (contadorProductos > 0) {
+            $('#btn-crear-salida').prop('disabled', false);
+        } else {
+            $('#btn-crear-salida').prop('disabled', true);
+        }
+    }
+
+    // Validar antes de enviar
+    $('#form-crear-salida').on('submit', function(e) {
+        if (contadorProductos === 0) {
+            e.preventDefault();
+            alert('Debe agregar al menos un producto');
+            return false;
+        }
+    });
+
+    // Búsqueda de productos mejorada
+    $('#buscar-producto').on('input', function() {
+        const termino = $(this).val().trim();
+        
+        if (termino.length >= 2) {
+            buscarProductosAjax(termino);
+        } else {
+            $('#resultados-busqueda').empty();
+        }
+    });
+
+    function buscarProductosAjax(termino) {
+        $('#resultados-busqueda').html('<div class="text-center"><i class="fas fa-spinner fa-spin"></i> Buscando...</div>');
+        
+        $.ajax({
+            url: '../includes/buscar_productos.php',
+            method: 'POST',
+            data: { termino: termino },
+            dataType: 'json',
+            success: function(productos) {
+                mostrarResultadosBusqueda(productos);
+            },
+            error: function(xhr, status, error) {
+                console.error('Error buscando productos:', error);
+                $('#resultados-busqueda').html('<div class="alert alert-danger">Error al buscar productos</div>');
+            }
+        });
+    }
+
+    function mostrarResultadosBusqueda(productos) {
+        if (productos.length === 0) {
+            $('#resultados-busqueda').html('<div class="alert alert-warning">No se encontraron productos</div>');
+            return;
+        }
+        
+        let html = '<div class="list-group">';
+        productos.forEach(producto => {
+            const yaAgregado = productosAgregados[producto.id];
+            const claseAdicional = yaAgregado ? 'disabled' : '';
+            
+            html += `
+                <button type="button" 
+                        class="list-group-item list-group-item-action ${claseAdicional}"
+                        onclick="${yaAgregado ? '' : 'agregarProductoASalida(' + JSON.stringify(producto) + ')'}"
+                        ${yaAgregado ? 'disabled' : ''}>
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <strong>${producto.descripcion}</strong><br>
+                            <small class="text-muted">${producto.codigo} • ${producto.unidad_medida}</small>
+                        </div>
+                        <div class="text-end">
+                            ${yaAgregado ? 
+                                '<span class="badge bg-secondary">Ya agregado</span>' : 
+                                '<span class="badge bg-primary">+ Agregar</span>'
+                            }
+                        </div>
+                    </div>
+                </button>
+            `;
+        });
+        html += '</div>';
+        
+        $('#resultados-busqueda').html(html);
+    }
+
+    // Inicializar
+    $(document).ready(function() {
+        actualizarContador();
+        $('#buscar-producto').focus();
+    });
+    </script>
 
     <script>
     // Parche para asegurar que la función funcione

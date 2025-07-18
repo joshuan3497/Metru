@@ -73,16 +73,56 @@ if ($_POST) {
             break;
             
         case 'eliminar':
+            $salida_id = $_POST['salida_id'] ?? 0;
+            
             // Solo se puede eliminar si está en estado 'preparando'
             $salida = obtenerRegistro("SELECT estado FROM salidas_mercancia WHERE id = ?", [$salida_id]);
+            
             if ($salida && $salida['estado'] == 'preparando') {
-                ejecutarConsulta("DELETE FROM salidas_mercancia WHERE id = ?", [$salida_id]);
-                $_SESSION['mensaje'] = 'Salida eliminada correctamente';
-                $_SESSION['tipo_mensaje'] = 'success';
+                try {
+                    global $pdo;
+                    $pdo->beginTransaction();
+                    
+                    // IMPORTANTE: Eliminar en este orden exacto
+                    
+                    // 1. Primero eliminar asignaciones de trabajadores
+                    $sql1 = "DELETE FROM salida_trabajadores WHERE salida_id = ?";
+                    ejecutarConsulta($sql1, [$salida_id]);
+                    
+                    // 2. Luego eliminar detalles de productos
+                    $sql2 = "DELETE FROM detalle_salidas WHERE salida_id = ?";
+                    ejecutarConsulta($sql2, [$salida_id]);
+                    
+                    // 3. Verificar que no hay facturas (por si acaso)
+                    $facturas = obtenerRegistro("SELECT COUNT(*) as total FROM facturas WHERE salida_id = ?", [$salida_id]);
+                    if ($facturas['total'] > 0) {
+                        throw new Exception("No se puede eliminar: hay facturas asociadas");
+                    }
+                    
+                    // 4. Finalmente eliminar la salida
+                    $sql3 = "DELETE FROM salidas_mercancia WHERE id = ?";
+                    ejecutarConsulta($sql3, [$salida_id]);
+                    
+                    $pdo->commit();
+                    
+                    $_SESSION['mensaje'] = 'Salida eliminada correctamente';
+                    $_SESSION['tipo_mensaje'] = 'success';
+                    
+                } catch (Exception $e) {
+                    $pdo->rollback();
+                    $_SESSION['mensaje'] = 'Error al eliminar: ' . $e->getMessage();
+                    $_SESSION['tipo_mensaje'] = 'danger';
+                    
+                    // Log del error para debugging
+                    error_log("Error eliminando salida $salida_id: " . $e->getMessage());
+                }
             } else {
-                $_SESSION['mensaje'] = 'Solo se pueden eliminar salidas en preparación';
-                $_SESSION['tipo_mensaje'] = 'error';
+                $_SESSION['mensaje'] = 'Solo se pueden eliminar salidas en estado Preparando';
+                $_SESSION['tipo_mensaje'] = 'warning';
             }
+            
+            header('Location: salidas.php');
+            exit();
             break;
     }
     

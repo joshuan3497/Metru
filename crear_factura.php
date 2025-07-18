@@ -909,5 +909,17 @@ $('#form-crear-factura').on('submit', async function(e) {
 });
 
 </script>
+<!-- Sistema offline -->
+<script src="/Metru/js/offline-handler.js"></script>
+
+<script>
+// Inicializar sistema offline al cargar
+$(document).ready(function() {
+    // Cachear datos si hay conexión
+    if (navigator.onLine && window.sistemaOffline) {
+        sistemaOffline.cachearDatosSalida(<?php echo $salida_id; ?>);
+    }
+});
+</script>
 
 <?php include '../includes/footer.php'; ?>
