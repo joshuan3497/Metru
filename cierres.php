@@ -135,31 +135,6 @@ if ($_POST) {
             exit();
             break;
         
-        case 'agregar_gasto':
-        $concepto = $_POST['concepto'] ?? '';
-        $monto = $_POST['monto'] ?? 0;
-        $fecha_gasto = $_POST['fecha_gasto'] ?? date('Y-m-d');
-        $observaciones = $_POST['observaciones'] ?? '';
-        
-        if ($concepto && $monto > 0) {
-            try {
-                ejecutarConsulta(
-                    "INSERT INTO gastos_ruta (salida_id, concepto, monto, fecha_gasto, observaciones) 
-                    VALUES (?, ?, ?, ?, ?)",
-                    [$salida_post_id, $concepto, $monto, $fecha_gasto, $observaciones]
-                );
-                
-                $_SESSION['mensaje'] = 'Gasto registrado correctamente';
-                $_SESSION['tipo_mensaje'] = 'success';
-            } catch (Exception $e) {
-                $_SESSION['mensaje'] = 'Error al registrar el gasto';
-                $_SESSION['tipo_mensaje'] = 'danger';
-            }
-        }
-        
-        header('Location: cierres.php?salida_id=' . $salida_post_id);
-        exit();
-        break;
     }    
 }
 
