@@ -143,6 +143,30 @@ if ($config_path) {
         .badge {
             border-radius: 8px;
         }
+
+        /* Prevenir parpadeo de modales */
+        .modal {
+            display: none;
+        }
+
+        .modal.show {
+            display: block !important;
+        }
+
+        .modal-backdrop {
+            opacity: 0;
+            transition: opacity 0.15s linear;
+        }
+
+        .modal-backdrop.show {
+            opacity: 0.5;
+        }
+
+        /* Prevenir saltos de scroll */
+        body.modal-open {
+            overflow: hidden;
+            padding-right: 0 !important;
+        }
     </style>
     
     <!-- Script de verificación -->
@@ -201,134 +225,6 @@ if ($config_path) {
     }
     </style>
 
-    <style>
-    /* Solución para parpadeo de modales */
-    .modal {
-        display: none;
-        -webkit-transform: translateZ(0);
-        -moz-transform: translateZ(0);
-        -ms-transform: translateZ(0);
-        -o-transform: translateZ(0);
-        transform: translateZ(0);
-    }
-
-    .modal.fade {
-        -webkit-transition: none !important;
-        -moz-transition: none !important;
-        -ms-transition: none !important;
-        -o-transition: none !important;
-        transition: none !important;
-    }
-
-    .modal.fade .modal-dialog {
-        -webkit-transition: -webkit-transform 0.3s ease-out;
-        -moz-transition: -moz-transform 0.3s ease-out;
-        -o-transition: -o-transform 0.3s ease-out;
-        transition: transform 0.3s ease-out;
-    }
-
-    .modal-backdrop {
-        display: none;
-        -webkit-transition: opacity 0.15s linear !important;
-        -moz-transition: opacity 0.15s linear !important;
-        -ms-transition: opacity 0.15s linear !important;
-        -o-transition: opacity 0.15s linear !important;
-        transition: opacity 0.15s linear !important;
-    }
-
-    .modal-backdrop.show {
-        display: block;
-    }
-
-    /* Prevenir scroll jump */
-    body.modal-open {
-        overflow: hidden !important;
-        padding-right: 0 !important;
-    }
-
-    .modal-open .modal {
-        overflow-x: hidden;
-        overflow-y: auto;
-    }
-
-    /* Mejorar rendimiento */
-    .modal * {
-        -webkit-font-smoothing: antialiased;
-        -moz-osx-font-smoothing: grayscale;
-    }
-
-    /* Z-index apropiado */
-    .modal-backdrop {
-        z-index: 1040;
-    }
-
-    .modal {
-        z-index: 1050;
-    }
-
-    .modal-backdrop.fade {
-        opacity: 0;
-    }
-
-    .modal-backdrop.show {
-        opacity: 0.5;
-    }
-    </style>
-
-    <!-- SCRIPT PARA MANEJAR MODALES SIN PARPADEO -->
-    <script>
-    $(document).ready(function() {
-        // Deshabilitar animaciones si hay problemas de rendimiento
-        $.fx.off = false; // Cambiar a true si siguen los problemas
-        
-        // Configuración global para modales
-        $.fn.modal.Constructor.DEFAULTS.backdrop = 'static';
-        $.fn.modal.Constructor.DEFAULTS.keyboard = false;
-        
-        // Mejorar rendimiento de modales
-        $(document).on('show.bs.modal', '.modal', function (e) {
-            // Forzar repintado para evitar parpadeo
-            $(this).css('display', 'block');
-            this.offsetHeight; // Trigger reflow
-            $(this).addClass('show');
-        });
-        
-        // Limpiar después de cerrar
-        $(document).on('hidden.bs.modal', '.modal', function (e) {
-            // Remover cualquier backdrop residual
-            $('.modal-backdrop').remove();
-            // Resetear el body
-            $('body').removeClass('modal-open').removeAttr('style');
-        });
-        
-        // Prevenir múltiples backdrops
-        $(document).on('show.bs.modal', '.modal', function () {
-            setTimeout(function(){
-                $('.modal-backdrop').not(':first').remove();
-            }, 100);
-        });
-    });
-
-    // Función mejorada para abrir modales sin parpadeo
-    function abrirModal(modalId) {
-        // Cerrar cualquier modal abierta
-        $('.modal.show').modal('hide');
-        
-        // Esperar un momento antes de abrir la nueva
-        setTimeout(function() {
-            $('#' + modalId).modal('show');
-        }, 150);
-    }
-
-    // Función para cerrar modal sin parpadeo
-    function cerrarModal(modalId) {
-        $('#' + modalId).modal('hide');
-        setTimeout(function() {
-            $('.modal-backdrop').remove();
-            $('body').removeClass('modal-open').removeAttr('style');
-        }, 150);
-    }
-    </script>
 
 </head>
 <body>

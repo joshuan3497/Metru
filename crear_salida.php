@@ -396,7 +396,8 @@ include '../includes/header.php';
         const html = `
             <div class="producto-item card mb-2" id="producto_item_${producto.id}">
                 <div class="card-body p-2">
-                    <input type="hidden" name="producto_${contadorProductos}_id" value="${producto.id}">
+                    <input type="hidden" name="producto_${window.indiceProducto}_id" value="${producto.id}">
+                    <input type="hidden" name="producto_${window.indiceProducto}_cantidad" class="cantidad-hidden" value="1">
                     <div class="row align-items-center">
                         <div class="col-md-6">
                             <strong>${producto.descripcion}</strong><br>
@@ -408,11 +409,12 @@ include '../includes/header.php';
                             <div class="input-group input-group-sm">
                                 <span class="input-group-text">Cantidad</span>
                                 <input type="number" 
-                                    name="producto_${contadorProductos}_cantidad" 
-                                    class="form-control" 
+                                    class="form-control cantidad-input" 
+                                    data-index="${window.indiceProducto}"
                                     value="1" 
                                     min="1" 
-                                    required>
+                                    required
+                                    onchange="actualizarCantidadHidden(this)">
                             </div>
                         </div>
                         <div class="col-md-2 text-end">
@@ -632,6 +634,12 @@ include '../includes/header.php';
             }
         };
     });
+    
+    function actualizarCantidadHidden(input) {
+        const index = $(input).data('index');
+        const cantidad = $(input).val();
+        $(input).closest('.producto-item').find('.cantidad-hidden').val(cantidad);
+    }
     </script>
 </form>
 

@@ -147,22 +147,26 @@
 <script>
 // Script CORREGIDO para el modal
 $(document).ready(function() {
-    // Eliminar cualquier inicialización previa del modal
-    $('#modalAgregarGasto').modal('dispose');
+    // Variable global para el modal
+    let modalGastos = null;
     
     // Evento para mostrar el modal
-    $('#btnAgregarGasto').on('click', function() {
-        // Usar Bootstrap 5 correctamente
-        const modalElement = document.getElementById('modalAgregarGasto');
-        const modal = new bootstrap.Modal(modalElement, {
-            backdrop: true,
-            keyboard: true,
-            focus: true
-        });
-        modal.show();
+    $('#btnAgregarGasto').off('click').on('click', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        
+        // Crear nueva instancia solo si no existe
+        if (!modalGastos) {
+            modalGastos = new bootstrap.Modal(document.getElementById('modalAgregarGasto'), {
+                backdrop: 'static',
+                keyboard: true
+            });
+        }
+        
+        modalGastos.show();
     });
     
-    // Limpiar formulario cuando se cierre el modal
+    // Limpiar formulario cuando se cierre
     $('#modalAgregarGasto').on('hidden.bs.modal', function () {
         $(this).find('form')[0].reset();
     });
